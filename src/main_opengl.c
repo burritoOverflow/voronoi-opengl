@@ -52,6 +52,11 @@ static Vector2 seed_velocities[SEEDS_COUNT];
 static GLuint vao;
 static GLuint vbos[COUNT_ATTRIBS];
 
+static int current_width = DEFAULT_SCREEN_WIDTH;
+static int current_height = DEFAULT_SCREEN_HEIGHT;
+static GLint u_resolution;
+static uint32_t *frame_pixels;
+
 void MessageCallback(GLenum source,
                      GLenum type,
                      GLuint id,
@@ -204,7 +209,7 @@ bool load_shader_program(const char *vertex_file_path,
 
 float rand_float(void)
 {
-    return (float) rand() / RAND_MAX;
+    return (float)rand() / (float)RAND_MAX;
 }
 
 float lerpf(float a, float b, float t)
@@ -215,8 +220,8 @@ float lerpf(float a, float b, float t)
 void generate_random_seeds(void)
 {
     for (size_t i = 0; i < SEEDS_COUNT; ++i) {
-        seed_positions[i].x = rand_float()*DEFAULT_SCREEN_WIDTH;
-        seed_positions[i].y = rand_float()*DEFAULT_SCREEN_HEIGHT;
+        seed_positions[i].x = rand_float()*current_width;
+        seed_positions[i].y = rand_float()*current_height;
         seed_colors[i].x = rand_float();
         seed_colors[i].y = rand_float();
         seed_colors[i].z = rand_float();
@@ -236,13 +241,13 @@ void render_frame(double delta_time)
 
     for (size_t i = 0; i < SEEDS_COUNT; ++i) {
         float x = seed_positions[i].x + seed_velocities[i].x*delta_time;
-        if (0 <= x && x <= DEFAULT_SCREEN_WIDTH) {
+        if (0 <= x && x <= current_width) {
             seed_positions[i].x = x;
         } else {
             seed_velocities[i].x *= -1;
         }
         float y = seed_positions[i].y + seed_velocities[i].y*delta_time;
-        if (0 <= y && y <= DEFAULT_SCREEN_HEIGHT) {
+        if (0 <= y && y <= current_height) {
             seed_positions[i].y = y;
         } else {
             seed_velocities[i].y *= -1;
@@ -263,7 +268,6 @@ void render_video_mode(GLFWwindow *window)
         exit(1);
     }
 
-    static uint32_t frame_pixels[DEFAULT_SCREEN_HEIGHT][DEFAULT_SCREEN_WIDTH];
     static char file_path[1024];
 
     size_t fps = 60;
@@ -276,14 +280,14 @@ void render_video_mode(GLFWwindow *window)
 
         glReadPixels(0,
                      0,
-                     DEFAULT_SCREEN_WIDTH,
-                     DEFAULT_SCREEN_HEIGHT,
+                     current_width,
+                     current_height,
                      GL_RGBA,
                      GL_UNSIGNED_BYTE,
                      frame_pixels);
 
         snprintf(file_path, sizeof(file_path), "%s/frame-%03zu.png", output_dir, i);
-        if (!stbi_write_png(file_path, DEFAULT_SCREEN_WIDTH, DEFAULT_SCREEN_HEIGHT, 4, frame_pixels, sizeof(uint32_t)*DEFAULT_SCREEN_WIDTH)) {
+        if (!stbi_write_png(file_path, current_width, current_height, 4, frame_pixels, sizeof(uint32_t)*current_width)) {
             fprintf(stderr, "ERROR: could not save file %s\n", file_path);
             exit(1);
         }
@@ -327,6 +331,21 @@ typedef enum {
     MODE_RENDER_VIDEO,
 } Mode;
 
+void framebuffer_size_callback(GLFWwindow* window, int width, int height)
+{
+    (void)window;
+
+    glViewport(0, 0, width, height);
+
+    current_width = width;
+    current_height = height;
+
+    glUniform2f(u_resolution, (float)width, (float)height);
+    frame_pixels = realloc(frame_pixels, sizeof(uint32_t) * width * height);
+
+    printf("Window resized to: %dx%d\n", width, height);
+}
+
 int main(int argc, char **argv)
 {
     Mode mode = MODE_INTERACTIVE;
@@ -353,8 +372,8 @@ int main(int argc, char **argv)
 
 
     GLFWwindow * const window = glfwCreateWindow(
-                                    DEFAULT_SCREEN_WIDTH,
-                                    DEFAULT_SCREEN_HEIGHT,
+                                    current_width,
+                                    current_height,
                                     "OpenGL Template",
                                     NULL,
                                     NULL);
@@ -364,7 +383,10 @@ int main(int argc, char **argv)
         exit(1);
     }
 
+    frame_pixels = malloc(sizeof(uint32_t) * current_width * current_height);
+
     glfwSetKeyCallback(window, key_callback);
+    glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
 
     int gl_ver_major = glfwGetWindowAttrib(window, GLFW_CONTEXT_VERSION_MAJOR);
     int gl_ver_minor = glfwGetWindowAttrib(window, GLFW_CONTEXT_VERSION_MINOR);
@@ -429,9 +451,9 @@ int main(int argc, char **argv)
     }
     glUseProgram(program);
 
-    // TODO: resize the canvas when the window is resized
-    GLint u_resolution = glGetUniformLocation(program, "resolution");
-    glUniform2f(u_resolution, DEFAULT_SCREEN_WIDTH, DEFAULT_SCREEN_HEIGHT);
+    // Store the uniform location globally
+    u_resolution = glGetUniformLocation(program, "resolution");
+    glUniform2f(u_resolution, current_width, current_height);
 
     switch (mode) {
     case MODE_INTERACTIVE:
@@ -444,5 +466,6 @@ int main(int argc, char **argv)
         UNREACHABLE("Unexpected execution mode");
     }
 
+    free(frame_pixels);
     return 0;
 }
