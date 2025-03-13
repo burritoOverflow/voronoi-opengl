@@ -312,6 +312,16 @@ void interactive_mode(GLFWwindow *window)
     }
 }
 
+void key_callback(GLFWwindow *window, int key, int scancode, int action,
+                  int mods) {
+  (void)scancode;
+  (void)mods;
+
+  if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
+    glfwSetWindowShouldClose(window, GLFW_TRUE);
+  }
+}
+
 typedef enum {
     MODE_INTERACTIVE,
     MODE_RENDER_VIDEO,
@@ -353,6 +363,8 @@ int main(int argc, char **argv)
         glfwTerminate();
         exit(1);
     }
+
+    glfwSetKeyCallback(window, key_callback);
 
     int gl_ver_major = glfwGetWindowAttrib(window, GLFW_CONTEXT_VERSION_MAJOR);
     int gl_ver_minor = glfwGetWindowAttrib(window, GLFW_CONTEXT_VERSION_MINOR);
